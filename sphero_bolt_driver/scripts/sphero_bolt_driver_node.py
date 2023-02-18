@@ -2,95 +2,76 @@
 
 # ROS libraries
 import rospy
-from geometry_msgs.msg import Vector3, Twist
-from std_msgs.msg import Float64
+from geometry_msgs.msg import Twist
+from std_msgs.msg import ColorRGBA
+from sensor_msgs.msg import Illuminance
 
 # Sphero libraries
 from spherov2 import scanner
-from spherov2.sphero_edu import SpheroEduAPI, EventType
+from spherov2.sphero_edu import SpheroEduAPI
 from spherov2.types import Color
 
+# Sphero utils
+import sb_utils
+
 # Other libraries
-import numpy
-import random
 import math
 
 # Pre-defined global variables
 
-_max_heading = 30
-_max_speed = 30
+_b_speed = 0.2
+_b_heading = math.pi
+
+_target_max_speed   = min(sb_utils.MAX_BOLT_VEL, max(-sb_utils.MAX_BOLT_VEL, _b_speed))  # Max BOLT speed 1.5 m/s
+_target_max_heading = min(sb_utils.MAX_BOLT_HEADING, max(-sb_utils.MAX_BOLT_HEADING, _b_heading)) # Bounding target heading to [-pi, pi] rad
+
+_target_speed   = 0
 _target_heading = 0
-_target_speed = 0
+_led_color_front = Color(0, 0, 0)
+_led_color_back  = Color(0, 0, 0)
 
+_illumniance_msg = Illuminance()
 
-# Insert your code inside the function process_data
-def process_data():
-    # You can acces the value of the following variables:
-    # If pressed key (q) _qwe.x = 1.0 ; (w) _qwe.y = 1.0; (e) _qwe.z = 1.0. Otherwise, they all equal to 0.0
-    # If pressed key (a) _asd.x = 1.0 ; (s) _asd.y = 1.0; (d) _asd.z = 1.0. Otherwise, they all equal to 0.0
-    # If click in the interface, _pose.x = vertical coordinate ;  _pose.y = horizontal coordinate. Otherwise, they all equal to -1.0
-    # If click out of the interface, or the mouse leaves the interface, _pose.x = _pose.y = -1.0
-
-    global _qwe, _asd, _pose, _cmd_vel
-
-    # Outputs: replace the value 0.0 with your output
-    # linear velocity, [-3.0,3.0] (+-1.5 m/s)
-    _cmd_vel.linear.x = 0.0
-    # angular velocity, [-6.0,6.0] (+-3.0 rad/s)
-    _cmd_vel.angular.z = 0.0
-    # camera pan, [-1.57,1.57] (rad)
-    _cam_pan.data = 0.0
-    # camera tilt, [-1.57,1.57] (rad)
-    _cam_tilt.data = 0.0
-
-    # Cleaning keyboard input data after being processed, if you want
-    # to keep it, you must store it in a global variable.
-    # Other variables are not cleaded here.
-    clean_input()
-
-##############################################################
-##############################################################
-
+# Data should be moved to a robot state
 def update_state():
-    global _qwe, _asd, _pose, _cmd_vel
+    # Check if past speed is the same, if so, do not update
+    # Heading might require continuous restart
+    # Implement updates with a FSM
+    return 
 
 # Cleans data after being processed
 def clean_input():
-    global _target_heading, _target_speed
-    print(_target_heading)
-    print(_target_speed)
-    _target_heading = 0
-    _target_speed = 0
+    # Check if past heading or past vel is the same, if so, do not update
+    return 
 
 # Define callbacks and functions to process incoming messages
 def cmd_vel_callback(msg):
-    global _target_heading, _target_speed, _max_heading, _max_speed
+    global _target_speed, _target_heading
+    _target_speed = ms_to_speed(msg.linear.x)
+    _target_heading = rad_to_heading(msg.angular.z)
+    return
 
-    if -_max_heading <= msg.angular.z <= _max_heading:
-        _target_heading = msg.angular.z
-    else :
-        if msg.angular.z > 0 :
-            _target_heading = _max_heading
-        else :
-            _target_heading = -_max_heading
+def led_color_front_callback(msg):
+    global _led_color_front
+    _led_color_front = Color(round(msg.r), round(msg.g), round(msg.b))
+    return
 
-    if -_max_speed <= msg.linear.x <= _max_speed:
-        _target_speed = msg.linear.x
-    else :
-        if msg.angular.z > 0 :
-            _target_speed = _max_speed
-        else :
-            _target_speed = -_max_speed
+def led_color_back_callback(msg):
+    global _led_color_back
+    _led_color_back = Color(round(msg.r), round(msg.g), round(msg.b))
+    return
 
+# Util methods 
 
-def asd_callback(msg):
-    global _asd
-    _asd = msg
-
-def pose_callback(msg):
-    global _pose
-    _pose = msg
-
+def ms_to_speed(linear_x):
+    bound_speed = min(max(0, linear_x), _target_max_speed) 
+    sphero_speed = round((bound_speed * 255)/sb_utils.MAX_BOLT_VEL)  
+    return sphero_speed 
+    
+def rad_to_heading(angular_z):
+    bound_heading = min(_target_max_heading, max(-_target_max_heading, angular_z))
+    sphero_heading = round(math.degrees(bound_heading))
+    return sphero_heading
     
 # Main
 
@@ -100,33 +81,34 @@ if __name__ == '__main__':
     rospy.init_node('sphero_bolt_driver_node')
 
     # Subscribe to the topics and associate the corresponding callback functions
-    sub_target_speed = rospy.Subscriber('sphero/cmd_vel', Twist, cmd_vel_callback)
-    #sub_asd = rospy.Subscriber('robot/teleoperation/key_asd/', Vector3, asd_callback)
-    #sub_pose = rospy.Subscriber('robot/teleoperation/mouse_pose/', Vector3, pose_callback)
+    sub_target_velocity = rospy.Subscriber('sphero/cmd_vel', Twist, cmd_vel_callback)
+    sub_led_color_front = rospy.Subscriber('sphero/led_color_front', ColorRGBA, led_color_front_callback)
+    sub_led_color_back = rospy.Subscriber('sphero/led_color_back', ColorRGBA, led_color_back_callback)
 
     # Publish messages
-    #pub_vel = rospy.Publisher('/robot/cmd_vel/', Twist, queue_size=10)
-    #pub_pan = rospy.Publisher('/robot/joint_pan_position_controller/command', Float64, queue_size = 1)
-    #pub_tilt = rospy.Publisher('/robot/joint_tilt_position_controller/command', Float64, queue_size = 1)
+    pub_illuminance = rospy.Publisher('sphero/illuminance', Illuminance, queue_size = 1)
 
-    toy = scanner.find_toy(toy_name="SB-31F6")
+    toy = scanner.find_toy(toy_name="SB-D760")
 
     with SpheroEduAPI(toy) as _droid:
         
-        rate=rospy.Rate(10)
+        rate=rospy.Rate(1) # Robot stops when updating velocity, even to the same value
 
         while not rospy.is_shutdown():
 
             _droid.reset_aim()
-
-            frontLed_color = Color(random.randint(0, 255), 0, random.randint(0, 255))
             
-            _droid.set_front_led(frontLed_color)
-            _droid.set_heading(round(_target_heading))
-            _droid.set_speed(round(_target_speed))
+            _droid.set_front_led(_led_color_front)
+            _droid.set_back_led(_led_color_back)
 
-            #pub_vel.publish(_cmd_vel)
-            #pub_pan.publish(_cam_pan)
-            #pub_tilt.publish(_cam_tilt)
+            print(_droid.get_luminosity()) 
+            print(_droid.get_luminosity_direct()) 
+
+            _droid._SpheroEduAPI__speed = _target_speed
+            _droid._SpheroEduAPI__heading =_target_heading
+            _droid._SpheroEduAPI__update_speed()
+
+            _illumniance_msg.illuminance = _droid.get_luminosity()['ambient_light']
+            pub_illuminance.publish(_illumniance_msg)
 
             rate.sleep()
