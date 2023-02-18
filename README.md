@@ -5,10 +5,13 @@
 ### Requirements
 
 Ubuntu 20.04 Focal Fossa
+
 ROS Noetic
+
 Python libraries: [`spherov2.py`](https://github.com/poiuytrezaur/spherov2.py.git), bleak
 
 ### Contributors
 
 David Garzón Ramos <david.garzon.ramos@ulb.be>
-Florian Noussa Yao <david.garzon.ramos@ulb.be>
+
+Florian Noussa Yao <florian.noussa.yao@ulb.be>
