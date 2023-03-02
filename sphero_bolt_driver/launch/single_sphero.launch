@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<launch>
+
+    <arg name="robot_no" doc="Two digits robot number"/>
+    <arg name="params_file" default="$(find sphero_bolt_driver)/config/params_$(arg robot_no).yaml" doc="File with robot configuration"/>
+
+    <group ns="robot_$(arg robot_no)">
+        <rosparam command="load" file="$(arg params_file)" />
+        <node name="sphero_driver" pkg="sphero_bolt_driver" type="sphero_bolt_driver_node.py" output="screen" required="false" respawn="true" respawn_delay="30">
+        </node>
+    </group>
+
+</launch>

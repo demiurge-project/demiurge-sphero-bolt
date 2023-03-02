@@ -1,114 +1,199 @@
 #!/usr/bin/env python3
 
-# ROS libraries
+"""sphero_bolt_driver_node.py: a wrapper to 
+operate a Sphero BOLT robot with the Robot 
+Operating System (ROS) and the spherov2 
+Python library.
+"""
+
+### ROS libraries
 import rospy
 from geometry_msgs.msg import Twist
 from std_msgs.msg import ColorRGBA
 from sensor_msgs.msg import Illuminance
 
-# Sphero libraries
+### Sphero libraries
 from spherov2 import scanner
 from spherov2.sphero_edu import SpheroEduAPI
 from spherov2.types import Color
 
-# Sphero utils
-import sb_utils
-
-# Other libraries
+### Other libraries
 import math
 
-# Pre-defined global variables
+### Credits
+__author__     = "David Garzón Ramos"
+__copyright__  = "Copyright 2023, IRIDIA - Université libre de Bruxelles"
+__credits__    = ["David Garzón Ramos", "Florian Noussa Yao", "Mauro Birattari"]
+__license__    = "MIT"
+__version__    = "0.1"
+__maintainer__ = "David Garzón Ramos"
+__email__      = "david.garzon.ramos@ulb.be"
+__status__     = "Prototype"
 
-_b_speed = 0.2
-_b_heading = math.pi
+class SpheroBolt():
 
-_target_max_speed   = min(sb_utils.MAX_BOLT_VEL, max(-sb_utils.MAX_BOLT_VEL, _b_speed))  # Max BOLT speed 1.5 m/s
-_target_max_heading = min(sb_utils.MAX_BOLT_HEADING, max(-sb_utils.MAX_BOLT_HEADING, _b_heading)) # Bounding target heading to [-pi, pi] rad
+    ### Constants
 
-_target_speed   = 0
-_target_heading = 0
-_led_color_front = Color(0, 0, 0)
-_led_color_back  = Color(0, 0, 0)
+    PERIOD_PUBLISH_CALLBACK: float = 0.1
+    PERIOD_CONTORL_CALLBACK: float = 0.25
+    MAX_BOLT_SPEED = 1.5 # m/s
+    MAX_BOLT_HEADING = math.pi # rad
 
-_illumniance_msg = Illuminance()
+    ### Init
 
-# Data should be moved to a robot state
-def update_state():
-    # Check if past speed is the same, if so, do not update
-    # Heading might require continuous restart
-    # Implement updates with a FSM
-    return 
+    def __init__(self) -> None:
 
-# Cleans data after being processed
-def clean_input():
-    # Check if past heading or past vel is the same, if so, do not update
-    return 
+        # init ROS node
+        rospy.init_node("sphero_bolt_driver_node")
 
-# Define callbacks and functions to process incoming messages
-def cmd_vel_callback(msg):
-    global _target_speed, _target_heading
-    _target_speed = ms_to_speed(msg.linear.x)
-    _target_heading = rad_to_heading(msg.angular.z)
-    return
+        self.target_speed   = 0
+        self.target_heading   = 0
+        self.led_color_front  = Color(0, 0, 0)
+        self.led_color_back   = Color(0, 0, 0)
 
-def led_color_front_callback(msg):
-    global _led_color_front
-    _led_color_front = Color(round(msg.r), round(msg.g), round(msg.b))
-    return
+        self.setup_sphero_parameters()
 
-def led_color_back_callback(msg):
-    global _led_color_back
-    _led_color_back = Color(round(msg.r), round(msg.g), round(msg.b))
-    return
+    ### Setup BOLT 
 
-# Util methods 
+    def setup_sphero_parameters(self) -> None: 
 
-def ms_to_speed(linear_x):
-    bound_speed = min(max(0, linear_x), _target_max_speed) 
-    sphero_speed = round((bound_speed * 255)/sb_utils.MAX_BOLT_VEL)  
-    return sphero_speed 
-    
-def rad_to_heading(angular_z):
-    bound_heading = min(_target_max_heading, max(-_target_max_heading, angular_z))
-    sphero_heading = round(math.degrees(bound_heading))
-    return sphero_heading
-    
-# Main
-
-if __name__ == '__main__':
-
-    # Add here the name of the ROS node. In ROS, node names must be unique.
-    rospy.init_node('sphero_bolt_driver_node')
-
-    # Subscribe to the topics and associate the corresponding callback functions
-    sub_target_velocity = rospy.Subscriber('sphero/cmd_vel', Twist, cmd_vel_callback)
-    sub_led_color_front = rospy.Subscriber('sphero/led_color_front', ColorRGBA, led_color_front_callback)
-    sub_led_color_back = rospy.Subscriber('sphero/led_color_back', ColorRGBA, led_color_back_callback)
-
-    # Publish messages
-    pub_illuminance = rospy.Publisher('sphero/illuminance', Illuminance, queue_size = 1)
-
-    toy = scanner.find_toy(toy_name="SB-D760")
-
-    with SpheroEduAPI(toy) as _droid:
+        self.boundary_speed     = float(rospy.get_param('speed_limit', 0.2))
+        self.target_max_speed   = min(self.MAX_BOLT_SPEED, 
+                                 max(-self.MAX_BOLT_SPEED, self.boundary_speed))  
         
-        rate=rospy.Rate(1) # Robot stops when updating velocity, even to the same value
+        self.boundary_heading   = float(rospy.get_param('turning_limit', math.pi/2))
+        self.target_max_heading = min(self.MAX_BOLT_HEADING, 
+                                 max(-self.MAX_BOLT_HEADING, self.boundary_heading))
+        
+        init_led_front_rgb = rospy.get_param('led_front_rgb', [0, 0, 0])
+        self.led_front_rgb = Color(init_led_front_rgb[0], init_led_front_rgb[1], init_led_front_rgb[2])
 
-        while not rospy.is_shutdown():
+        init_led_back_rgb  = rospy.get_param('led_back_rgb', [0, 0, 0])
+        self.led_back_rgb  = Color(init_led_back_rgb[0], init_led_back_rgb[1], init_led_back_rgb[2])
 
-            _droid.reset_aim()
-            
-            _droid.set_front_led(_led_color_front)
-            _droid.set_back_led(_led_color_back)
+        self.set_sphero_leds()
 
-            print(_droid.get_luminosity()) 
-            print(_droid.get_luminosity_direct()) 
+        self.create_ros_publishers()
+        self.create_ros_subscribers()
 
-            _droid._SpheroEduAPI__speed = _target_speed
-            _droid._SpheroEduAPI__heading =_target_heading
-            _droid._SpheroEduAPI__update_speed()
+        # Publishing timer
+        rospy.Timer(
+            rospy.Duration(self.PERIOD_PUBLISH_CALLBACK), self.publisher_callback)
 
-            _illumniance_msg.illuminance = _droid.get_luminosity()['ambient_light']
-            pub_illuminance.publish(_illumniance_msg)
+        # Control update timer
+        rospy.Timer(
+            rospy.Duration(self.PERIOD_CONTORL_CALLBACK), self.control_loop_callback)
 
-            rate.sleep()
+    ### Create subscribers
+
+    def create_ros_subscribers(self) -> None:
+
+        # Velocity 
+        rospy.Subscriber('sphero/cmd_vel', Twist, 
+                         self.cmd_vel_callback, queue_size=1)
+        # Front LED
+        rospy.Subscriber('sphero/led_front_rgb', ColorRGBA, 
+                         self.led_front_rgb_callback, queue_size=1)      
+        # Back LED 
+        rospy.Subscriber('sphero/led_back_rgb', ColorRGBA,
+                         self.led_back_rgb_callback, queue_size=1)
+
+    ### Subscribers
+
+    def cmd_vel_callback(self, msg) -> None:
+        self.target_speed = self.ms_to_speed(msg.linear.x)
+        self.target_heading = self.rad_to_heading(msg.angular.z)
+
+    def led_front_rgb_callback(self, msg) -> None:
+        self.led_front_rgb = Color(round(msg.r), round(msg.g), round(msg.b))
+
+    def led_back_rgb_callback(self, msg) -> None:
+        self.led_back_rgb = Color(round(msg.r), round(msg.g), round(msg.b))
+
+    ### Create publishers
+
+    def create_ros_publishers(self) -> None:
+
+        # Ambient light
+        self.pub_illuminance = rospy.Publisher('sphero/illuminance', 
+                                               Illuminance, queue_size=1)
+        
+    ### Publishers
+
+    def publish_illuminance(self):
+        illumniance_msg = Illuminance()
+        illumniance_msg.header.stamp = rospy.Time.now()
+        illumniance_msg.illuminance = droid.get_luminosity()['ambient_light']
+        self.pub_illuminance.publish(illumniance_msg)
+
+    def publisher_callback(self, event=None):
+        self.publish_illuminance()   
+    
+    ### Controls 
+
+    def set_sphero_velocity(self):
+
+        update_velocity = False
+
+        # This is not a velocity but a rotation of the specified angle, 
+        # which is executed at every time step
+        if self.target_heading != 0:
+            droid.reset_aim()
+            droid._SpheroEduAPI__heading = self.target_heading
+            update_velocity = True
+
+        if droid.get_speed != self.target_speed:
+            droid._SpheroEduAPI__speed = self.target_speed
+            update_velocity = True
+
+        if update_velocity == True:
+            droid._SpheroEduAPI__update_speed()
+    
+    def clear_sphero_velocity(self):
+        self.target_speed = 0
+        self.target_heading = 0
+    
+    def set_sphero_leds(self):
+
+        if droid.get_front_led() != self.led_front_rgb:
+            droid.set_front_led(self.led_front_rgb)
+
+        if droid.get_back_led() != self.led_back_rgb:
+            droid.set_back_led(self.led_back_rgb)
+
+    def clear_sphero_leds(self):
+        droid.set_front_led(0, 0, 0)
+        droid.set_back_led(0, 0, 0)  
+
+    def control_loop_callback(self, event=None):
+        self.set_sphero_leds()
+        self.set_sphero_velocity()
+
+    ### Utils
+
+    def ms_to_speed(self, linear_x):
+        bounded_speed = min(max(0, linear_x), self.target_max_speed) 
+        sphero_speed = round((bounded_speed * 255)/self.MAX_BOLT_SPEED)  
+        return sphero_speed 
+        
+    def rad_to_heading(self, angular_z):
+        bounded_heading = min(self.target_max_heading, max(-self.target_max_heading, angular_z))
+        sphero_heading = (round(math.degrees(bounded_heading)) + 360) % 360
+        return sphero_heading
+
+### Main             
+        
+if __name__ == "__main__":
+
+    sphero_id = rospy.get_param('sphero_id', 'SB-0000')
+    toy = scanner.find_toy(toy_name=sphero_id)
+
+    with SpheroEduAPI(toy) as droid:
+
+        try:
+            sphero_bolt = SpheroBolt()
+            rospy.spin()
+
+        except rospy.ROSInterruptException:
+            rospy.loginfo("Keyboard interrupted")
+            exit()

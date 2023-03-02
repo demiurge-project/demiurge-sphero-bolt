@@ -1,0 +1,15 @@
+######
+# Configuration paramertes for Sphero Bolts
+#####
+
+# Sphero ID
+sphero_id: 'SB-9D95'
+
+# Limits to the speed and heading
+speed_limit:   0.2
+turning_limit: 3.1415
+
+# Starting LEDs color
+led_front_rgb: [25, 0, 0]
+led_back_rgb:  [0, 0, 25]
+
