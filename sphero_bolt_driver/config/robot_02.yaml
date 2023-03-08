@@ -1,0 +1,6 @@
+######
+# Robot ID of Sphero Bolts
+#####
+
+# Sphero ID S02
+sphero_id: 'SB-645E'
