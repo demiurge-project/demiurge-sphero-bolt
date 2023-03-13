@@ -1,0 +1,3 @@
+[submodule "spherov2.py"]
+	path = spherov2.py
+	url = https://github.com/demiurge-project/spherov2.py.git
