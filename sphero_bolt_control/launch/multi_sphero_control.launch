@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<launch>
+
+    <include file="$(find sphero_bolt_control)/launch/single_sphero_control.launch">
+        <arg name="robot_no" value="03"/>
+    </include>
+
+    <include file="$(find sphero_bolt_control)/launch/single_sphero_control.launch">
+        <arg name="robot_no" value="06"/>
+    </include>
+
+    <include file="$(find sphero_bolt_control)/launch/single_sphero_control.launch">
+        <arg name="robot_no" value="07"/>
+    </include>
+
+</launch>

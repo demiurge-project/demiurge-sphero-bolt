@@ -1,0 +1,6 @@
+######
+# Robot ID of Sphero Bolts
+#####
+
+# Sphero ID S01
+sphero_id: 'SB-CB70'
