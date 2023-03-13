@@ -14,6 +14,10 @@ from std_msgs.msg import ColorRGBA, Float32
 from sensor_msgs.msg import Illuminance, Imu
 
 ### Sphero libraries
+import os, sys
+scriptPath = os.path.realpath(os.path.dirname(sys.argv[0]))
+os.chdir(scriptPath)
+sys.path.append("../../spherov2.py")
 from spherov2 import scanner
 from spherov2.sphero_edu import SpheroEduAPI
 from spherov2.types import Color
