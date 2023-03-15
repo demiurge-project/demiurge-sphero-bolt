@@ -10,12 +10,11 @@ sphero_bolt_driver_node.py
 import rospy
 import tf
 from geometry_msgs.msg import Twist
-from std_msgs.msg import ColorRGBA, Float32, Int64, Bool
+from std_msgs.msg import ColorRGBA, Float32
 from sensor_msgs.msg import Illuminance, Imu
 
 ### Other libraries
 import math
-import numpy
 
 ### Credits
 __author__     = "David Garzón Ramos"
@@ -35,29 +34,17 @@ class SpheroControl():
     MAX_BOLT_SPEED: float = 1.5 # m/s
     MAX_BOLT_HEADING: float = math.pi # rad
     GRAVITY: float = 9.80665 # m/s2
-
-    ### Modules parameters
     DARK_THRESHOLD: float = 100
-    BRIGHT_THRESHOLD: float = 500
-    NO_SIGNAL: int = 00000
-    P_TRUE = 0.1
 
     ## States
 
-    B_RANDOM_WALK: int = 0 
-    B_IDLE: int = 1
-    B_FOLLOW: int = 2
-    B_BROADCAST: int = 3
+    RANDOM_WALK: int = 0 
+    STOP: int = 1
 
     ## Transitions
 
-    T_SHAKE: int = 0
-    T_DARK: int = 1
-    T_BRIGHT: int = 2
-    T_SIGNAL: int = 3
-    T_RANDOM: int = 4
-    T_RESTART: int = 5
-    T_STOP: int = 6
+    SHAKE: int = 0
+    DARK: int = 1
 
     ### Init
 
@@ -74,49 +61,22 @@ class SpheroControl():
         self.imu            = Imu()
         self.encoders_vel   = Twist()
         self.vertical_acc   = Float32()
-        self.ir_signal      = Int64()
-        self.restart        = Bool()
-        self.stop           = Bool()
-        self.follow         = Bool()
-        self.broadcast      = Bool()
 
         # FSM configuration
 
         # Init state
-        self.state = self.B_IDLE
+        self.state = self.RANDOM_WALK
 
         # Transitions 
         self.transitions = {
 
             # Outgoing transitions RANDOM_WALK (transition -> state)
-            self.B_RANDOM_WALK: {
-                self.T_DARK: self.B_BROADCAST,
-                self.T_RANDOM: self.B_BROADCAST,
-                self.T_SIGNAL: self.B_FOLLOW,
-                self.T_STOP: self.B_IDLE
-            },
+            self.RANDOM_WALK: {
+                self.DARK: self.STOP },
 
-            # Outgoing transitions IDLE (transition -> state)
-            self.B_IDLE: {
-                self.T_SHAKE: self.B_RANDOM_WALK,
-                self.T_RESTART: self.B_RANDOM_WALK
-            }, 
-            
-            # Outgoing transitions FOLLOW (transition -> state)
-            self.B_FOLLOW: {
-                self.T_SHAKE: self.B_RANDOM_WALK,
-                self.T_RANDOM: self.B_RANDOM_WALK,
-                self.T_STOP: self.B_IDLE,
-                self.T_RESTART: self.B_RANDOM_WALK
-            },
-
-            # Outgoing transitions BROADCAST (transition -> state)
-            self.B_BROADCAST: {
-                self.T_SHAKE: self.B_RANDOM_WALK,
-                self.T_RANDOM: self.B_RANDOM_WALK, 
-                self.T_STOP: self.B_IDLE,
-                self.T_RESTART: self.B_RANDOM_WALK
-            }
+            # Outgoing transitions STOP (transition -> state)
+            self.STOP: {
+                self.SHAKE: self.RANDOM_WALK }
         }
 
         self.setup_sphero_parameters()
@@ -134,7 +94,7 @@ class SpheroControl():
         self.led_front_rgb.g = init_led_front_rgb[1]
         self.led_front_rgb.b = init_led_front_rgb[2]
 
-        init_led_back_rgb  = rospy.get_param('led_back_rgb', [0, 0, 0from numpy import random])
+        init_led_back_rgb  = rospy.get_param('led_back_rgb', [0, 0, 0])
         self.led_back_rgb.r = init_led_back_rgb[0]
         self.led_back_rgb.g = init_led_back_rgb[1]
         self.led_back_rgb.b = init_led_back_rgb[2]
@@ -177,18 +137,6 @@ class SpheroControl():
         # Vertical acceleration  
         rospy.Subscriber('sphero/vertical_acc', Float32,
                          self.vertical_acc_callback, queue_size=1)
-        
-        # IR signal
-        rospy.Subscriber('sphero/ir_signal', Int64,
-                         self.ir_signal_callback, queue_size=1)
-        
-        # Restart
-        rospy.Subscriber('sphero/restart', Bool,
-                         self.restart_callback, queue_size=1)
-        
-        # Stop
-        rospy.Subscriber('sphero/stop', Bool,
-                         self.stop_callback, queue_size=1)
 
     ### Subscribers
 
@@ -203,15 +151,6 @@ class SpheroControl():
 
     def vertical_acc_callback(self, msg) -> None:
         self.vertical_acc = msg
-
-    def ir_signal_callback(self, msg) -> None:
-        self.ir_signal = msg
-
-    def restart_callback(self, msg) -> None:
-        self.restart = msg
-
-    def stop_callback(self, msg) -> None:
-        self.stop = msg
 
     ### Create publishers
 
@@ -232,14 +171,6 @@ class SpheroControl():
         # Complete LED matrix
         self.pub_led_matrix_rgb = rospy.Publisher('sphero/led_matrix_rgb', 
                                                ColorRGBA, queue_size=1)
-        
-        # Complete LED matrix
-        self.pub_follow = rospy.Publisher('sphero/follow_behavior', 
-                                               Bool, queue_size=1)
-        
-        # Complete LED matrix
-        self.pub_broadcast = rospy.Publisher('sphero/broadcast_behavior', 
-                                               Bool, queue_size=1)
 
     ### Publishers
 
@@ -252,12 +183,6 @@ class SpheroControl():
 
     def publish_matrix(self):
         self.pub_led_matrix_rgb.publish(self.led_matrix_rgb)
-
-    def publish_follow(self):
-        self.pub_follow.publish(self.follow)
-
-    def publish_broadcast(self):
-        self.pub_broadcast.publish(self.broadcast)
     
     ### Utils
     
@@ -274,20 +199,10 @@ class SpheroControl():
     ### Transitions
 
     def evaluate_transition(self, index):
-        if index == self.T_SHAKE:
+        if index == self.SHAKE:
             return self.transition_shake()
-        elif index == self.T_DARK:
-            return self.transition_dark()
-        elif index == self.T_BRIGHT:
-            return self.transition_bright()
-        elif index == self.T_SIGNAL:
-            return self.transition_signal()
-        elif index == self.T_RANDOM:
-            return self.transition_random()
-        elif index == self.T_RESTART:
-            return self.transition_restart()
-        elif index == self.T_STOP:
-            return self.transition_stop()          
+        elif index == self.DARK:
+            return self.transition_dark()            
         return False
     
     def transition_shake(self):
@@ -301,45 +216,13 @@ class SpheroControl():
             return True
         return False
     
-    def transition_bright(self):
-        if (self.illuminance.illuminance > self.BRIGHT_THRESHOLD):
-            return True
-        return False
-    
-    def transition_signal(self):
-        if (self.ir_signal.data != self.NO_SIGNAL):
-            self.ir_signal.data = self.NO_SIGNAL
-            return True
-        return False
-    
-    def transition_random(self):
-        resolve =  numpy.random.choice(numpy.arange(0, 2), 
-                                       p=[1-self.P_TRUE, self.P_TRUE])
-        return  resolve
-    
-    def transition_restart(self):
-        if (self.restart == True):
-            self.restart = False
-            return True
-        return False
-    
-    def transition_stop(self):
-        if (self.stop == True):
-            self.stop = False
-            return True
-        return False
-    
     ### States
     
     def evaluate_state(self, index):
-        if index == self.B_RANDOM_WALK:
+        if index == self.RANDOM_WALK:
             self.state_randomwalk()
-        elif index == self.B_IDLE:
-            self.state_idle()
-        elif index == self.B_FOLLOW:
-            self.state_follow()
-        elif index == self.B_BROADCAST:
-            self.state_broadcast()
+        elif index == self.STOP:
+            self.state_stop()
         return False
     
     def state_randomwalk(self):
@@ -347,25 +230,10 @@ class SpheroControl():
         self.led_front_rgb.g = 25
         self.led_front_rgb.b = 0
 
-    def state_idle(self):
+    def state_stop(self):
         self.led_front_rgb.r = 25
         self.led_front_rgb.g = 0
         self.led_front_rgb.b = 0
-        self.clear_sphero_velocity()
-
-    def state_follow(self):
-        self.led_front_rgb.r = 0
-        self.led_front_rgb.g = 25
-        self.led_front_rgb.b = 0
-        self.follow = True
-        self.broadcast = False
-
-    def state_broadcast(self):
-        self.led_front_rgb.r = 25
-        self.led_front_rgb.g = 25
-        self.led_front_rgb.b = 0
-        self.follow = False
-        self.broadcast = True
 
     ### Controls 
     
@@ -382,8 +250,6 @@ class SpheroControl():
         self.publish_cmd_vel()   
         self.publish_leds()
         self.publish_matrix()
-        self.publish_follow()
-        self.publish_broadcast()
 
 ### Main             
         
