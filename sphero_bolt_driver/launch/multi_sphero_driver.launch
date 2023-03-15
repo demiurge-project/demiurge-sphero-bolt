@@ -3,7 +3,23 @@
 <launch>
 
     <include file="$(find sphero_bolt_driver)/launch/single_sphero_driver.launch">
+        <arg name="robot_no" value="01"/>
+    </include>
+
+    <include file="$(find sphero_bolt_driver)/launch/single_sphero_driver.launch">
+        <arg name="robot_no" value="02"/>
+    </include>
+
+    <include file="$(find sphero_bolt_driver)/launch/single_sphero_driver.launch">
         <arg name="robot_no" value="03"/>
+    </include>
+
+    <include file="$(find sphero_bolt_driver)/launch/single_sphero_driver.launch">
+        <arg name="robot_no" value="04"/>
+    </include>
+
+    <include file="$(find sphero_bolt_driver)/launch/single_sphero_driver.launch">
+        <arg name="robot_no" value="05"/>
     </include>
 
     <include file="$(find sphero_bolt_driver)/launch/single_sphero_driver.launch">
@@ -12,6 +28,38 @@
 
     <include file="$(find sphero_bolt_driver)/launch/single_sphero_driver.launch">
         <arg name="robot_no" value="07"/>
+    </include>
+
+    <include file="$(find sphero_bolt_driver)/launch/single_sphero_driver.launch">
+        <arg name="robot_no" value="08"/>
+    </include>
+
+    <include file="$(find sphero_bolt_driver)/launch/single_sphero_driver.launch">
+        <arg name="robot_no" value="09"/>
+    </include>
+    
+    <include file="$(find sphero_bolt_driver)/launch/single_sphero_driver.launch">
+        <arg name="robot_no" value="10"/>
+    </include>
+
+    <include file="$(find sphero_bolt_driver)/launch/single_sphero_driver.launch">
+        <arg name="robot_no" value="11"/>
+    </include>
+
+    <include file="$(find sphero_bolt_driver)/launch/single_sphero_driver.launch">
+        <arg name="robot_no" value="12"/>
+    </include>
+
+    <include file="$(find sphero_bolt_driver)/launch/single_sphero_driver.launch">
+        <arg name="robot_no" value="13"/>
+    </include>
+
+    <include file="$(find sphero_bolt_driver)/launch/single_sphero_driver.launch">
+        <arg name="robot_no" value="14"/>
+    </include>
+    
+    <include file="$(find sphero_bolt_driver)/launch/single_sphero_driver.launch">
+        <arg name="robot_no" value="15"/>
     </include>
 
 </launch>
