@@ -10,7 +10,7 @@ Python library.
 import rospy
 import tf
 from geometry_msgs.msg import Twist
-from std_msgs.msg import ColorRGBA, Float32
+from std_msgs.msg import ColorRGBA, Float32, Bool
 from sensor_msgs.msg import Illuminance, Imu
 
 ### Sphero libraries
@@ -45,6 +45,7 @@ class SpheroBolt():
     MAX_BOLT_HEADING = math.pi # rad
     GRAVITY = 9.80665 # m/s2
     LED_MATRIX_BLACK = ["000000" for _ in range(64)]
+    NO_SIGNAL: int = 00000
 
     ### Init
 
@@ -57,6 +58,9 @@ class SpheroBolt():
         self.target_heading   = 0
         self.led_color_front  = Color(0, 0, 0)
         self.led_color_back   = Color(0, 0, 0)
+        self.follow         = False
+        self.broadcast      = False
+        self.ir_signal      = self.NO_SIGNAL
 
         self.setup_sphero_parameters()
 
@@ -125,7 +129,15 @@ class SpheroBolt():
         # Complete LED matrix  
         rospy.Subscriber('sphero/led_matrix_rgb', ColorRGBA,
                          self.led_matrix_rgb_callback, queue_size=1)
-
+        
+        # Complete LED matrix  
+        rospy.Subscriber('sphero/follow', Bool,
+                         self.follow_callback, queue_size=1)
+        
+        # Complete LED matrix  
+        rospy.Subscriber('sphero/broadcast', Bool,
+                         self.broadcast_callback, queue_size=1)
+        
     ### Subscribers
 
     def cmd_vel_callback(self, msg) -> None:
@@ -140,6 +152,25 @@ class SpheroBolt():
 
     def led_matrix_rgb_callback(self, msg) -> None:
         self.led_matrix_rgb_new = Color(round(msg.r), round(msg.g), round(msg.b))
+
+    def follow_callback(self, msg) -> None:
+        if(msg.data != self.follow):
+            if (msg.data == True):
+                droid.start_ir_follow(3,7)
+                self.follow = True
+            else:
+                droid.reset_aim()
+                droid.stop_ir_follow()
+                self.follow = False
+
+    def broadcast_callback(self, msg) -> None:
+        if(msg.data != self.broadcast):
+            if (msg.data == True):
+                droid.start_ir_broadcast(3,7)
+                self.broadcast = True
+            else:
+                droid.stop_ir_broadcast()
+                self.broadcast = False
 
     ### Create publishers
 
@@ -160,6 +191,10 @@ class SpheroBolt():
         # Encoders vertical acceleration
         self.pub_vertical_acc = rospy.Publisher('sphero/vertical_acc', 
                                                Float32, queue_size=1)
+        
+        # Encoders vertical acceleration
+        self.pub_ir_signal = rospy.Publisher('sphero/ir_signal', 
+                                               Bool, queue_size=1)
         
     ### Publishers
 
@@ -202,11 +237,19 @@ class SpheroBolt():
         vertical_acc_msg.data = droid.get_vertical_acceleration() * self.GRAVITY
         self.pub_vertical_acc.publish(vertical_acc_msg)
 
+    def publish_ir_signal(self):
+        ir_readings = droid.get_ir_readings()
+        if 3 in ir_readings or 7 in ir_readings:
+            ir_signal = Bool()
+            ir_signal.data = True
+            self.pub_ir_signal.publish(ir_signal)
+
     def publisher_callback(self, event=None):
         self.publish_illuminance()   
         self.publish_imu()
         self.publish_velocity()
         self.publish_vertical_acc()
+        self.publish_ir_signal()
     
     ### Controls 
 
@@ -268,11 +311,13 @@ class SpheroBolt():
 
     def clear_sphero_matrix(self):
         droid.set_main_led(0, 0, 0)
-        
+
     def control_loop_callback(self, event=None):
         self.set_sphero_leds()
         self.set_sphero_matrix()
-        self.set_sphero_velocity()
+        if (self.follow == False and self.broadcast == False):
+            self.set_sphero_velocity()
+
 
     ### Utils
 

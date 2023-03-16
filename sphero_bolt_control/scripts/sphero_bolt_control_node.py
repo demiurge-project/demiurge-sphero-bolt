@@ -10,7 +10,7 @@ sphero_bolt_driver_node.py
 import rospy
 import tf
 from geometry_msgs.msg import Twist
-from std_msgs.msg import ColorRGBA, Float32, Int64, Bool
+from std_msgs.msg import ColorRGBA, Float32, Bool
 from sensor_msgs.msg import Illuminance, Imu
 
 ### Other libraries
@@ -37,7 +37,7 @@ class SpheroControl():
     GRAVITY: float = 9.80665 # m/s2
 
     ### Modules parameters
-    DARK_THRESHOLD: float = 100
+    DARK_THRESHOLD: float = 40
     BRIGHT_THRESHOLD: float = 500
     NO_SIGNAL: int = 00000
     P_TRUE = 0.1
@@ -74,7 +74,7 @@ class SpheroControl():
         self.imu            = Imu()
         self.encoders_vel   = Twist()
         self.vertical_acc   = Float32()
-        self.ir_signal      = Int64()
+        self.ir_signal      = Bool()
         self.restart        = Bool()
         self.stop           = Bool()
         self.follow         = Bool()
@@ -134,7 +134,7 @@ class SpheroControl():
         self.led_front_rgb.g = init_led_front_rgb[1]
         self.led_front_rgb.b = init_led_front_rgb[2]
 
-        init_led_back_rgb  = rospy.get_param('led_back_rgb', [0, 0, 0from numpy import random])
+        init_led_back_rgb  = rospy.get_param('led_back_rgb', [0, 0, 0])
         self.led_back_rgb.r = init_led_back_rgb[0]
         self.led_back_rgb.g = init_led_back_rgb[1]
         self.led_back_rgb.b = init_led_back_rgb[2]
@@ -179,7 +179,7 @@ class SpheroControl():
                          self.vertical_acc_callback, queue_size=1)
         
         # IR signal
-        rospy.Subscriber('sphero/ir_signal', Int64,
+        rospy.Subscriber('sphero/ir_signal', Bool,
                          self.ir_signal_callback, queue_size=1)
         
         # Restart
@@ -234,11 +234,11 @@ class SpheroControl():
                                                ColorRGBA, queue_size=1)
         
         # Complete LED matrix
-        self.pub_follow = rospy.Publisher('sphero/follow_behavior', 
+        self.pub_follow = rospy.Publisher('sphero/follow', 
                                                Bool, queue_size=1)
         
         # Complete LED matrix
-        self.pub_broadcast = rospy.Publisher('sphero/broadcast_behavior', 
+        self.pub_broadcast = rospy.Publisher('sphero/broadcast', 
                                                Bool, queue_size=1)
 
     ### Publishers
