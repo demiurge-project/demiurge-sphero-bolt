@@ -8,7 +8,6 @@ sphero_bolt_driver_node.py
 
 ### ROS libraries
 import rospy
-import tf
 from geometry_msgs.msg import Twist
 from std_msgs.msg import ColorRGBA, Float32, Bool
 from sensor_msgs.msg import Illuminance, Imu
@@ -42,22 +41,22 @@ class SpheroControl():
 
     ## States
 
-    B_RANDOM_WALK: int = 0 
+    B_BALLISTIC: int = 0 
     B_IDLE: int = 1
     B_FOLLOW: int = 2
     B_BROADCAST: int = 3
-    B_SEARCH: int = 4
+    B_ROTATE: int = 4
 
     ## Transitions
 
-    T_SHAKE: int = 0
+    T_SHAKE: int = 0 # TODO: add a transition that diff shake and stuck
     T_DARK: int = 1
     T_BRIGHT: int = 2
     T_SIGNAL: int = 3
     T_RESTART: int = 4
     T_STOP: int = 5
     T_RANDOM_S: int = 6
-    T_RANDOM_L: int = 7
+    T_RANDOM_L: int = 7 
 
     ### Init
 
@@ -89,41 +88,43 @@ class SpheroControl():
         self.transitions = {
 
             # Outgoing transitions RANDOM_WALK (transition -> state)
-            self.B_RANDOM_WALK: {
-                self.T_DARK: self.B_BROADCAST,
-                self.T_SHAKE: self.B_FOLLOW,
-                self.T_RANDOM_L: self.B_SEARCH,
+            self.B_BALLISTIC: {
+                #self.T_DARK: self.B_BROADCAST,
+                self.T_SHAKE: self.B_ROTATE,
+                #self.T_RANDOM_L: self.B_ROTATE,
                 self.T_SIGNAL: self.B_FOLLOW,
                 self.T_STOP: self.B_IDLE
             },
 
             # Outgoing transitions IDLE (transition -> state)
             self.B_IDLE: {
-                self.T_SHAKE: self.B_RANDOM_WALK,
-                self.T_RESTART: self.B_RANDOM_WALK
+                self.T_SHAKE: self.B_BALLISTIC,
+                self.T_RESTART: self.B_BALLISTIC
             }, 
             
             # Outgoing transitions FOLLOW (transition -> state)
             self.B_FOLLOW: {
-                self.T_SHAKE: self.B_RANDOM_WALK,
+                self.T_SHAKE: self.B_BALLISTIC,
                 #self.T_RANDOM: self.B_RANDOM_WALK,
                 self.T_STOP: self.B_IDLE,
-                self.T_RESTART: self.B_RANDOM_WALK
+                self.T_RESTART: self.B_BALLISTIC
             },
 
             # Outgoing transitions BROADCAST (transition -> state)
             self.B_BROADCAST: {
-                self.T_SHAKE: self.B_RANDOM_WALK,
+                self.T_SHAKE: self.B_BALLISTIC,
                 #self.T_RANDOM: self.B_RANDOM_WALK, 
                 self.T_STOP: self.B_IDLE,
-                self.T_RESTART: self.B_RANDOM_WALK
+                self.T_RESTART: self.B_BALLISTIC
             }, 
 
             # Outgoing transitions SEARCH (transition -> state)
-            self.B_SEARCH: {
-                self.T_SHAKE: self.B_RANDOM_WALK,
+            self.B_ROTATE: {
+                self.T_SHAKE: self.B_BALLISTIC,
                 self.T_SIGNAL: self.B_FOLLOW,
-                self.T_RANDOM_L: self.B_RANDOM_WALK,            
+                self.T_RANDOM_S: self.B_BALLISTIC,
+                self.T_STOP: self.B_IDLE,
+                self.T_RESTART: self.B_BALLISTIC            
             }
         }
 
@@ -291,9 +292,9 @@ class SpheroControl():
         elif index == self.T_SIGNAL:
             return self.transition_signal()
         elif index == self.T_RANDOM_S:
-            return self.transition_random(0.01)
+            return self.transition_random(0.3)
         elif index == self.T_RANDOM_L:
-            return self.transition_random(0.2)
+            return self.transition_random(0.1)
         elif index == self.T_RESTART:
             return self.transition_restart()
         elif index == self.T_STOP:
@@ -301,8 +302,8 @@ class SpheroControl():
         return False
     
     def transition_shake(self):
-        if (abs(self.imu.linear_acceleration.x) > self.GRAVITY
-            or abs(self.imu.linear_acceleration.y) > self.GRAVITY):
+        if (abs(self.imu.linear_acceleration.x) > 0.35 * self.GRAVITY
+            or abs(self.imu.linear_acceleration.y) > 0.35 * self.GRAVITY):
             print("TRANSITION: SHAKE")
             self.ir_signal.data = False
             return True
@@ -328,11 +329,11 @@ class SpheroControl():
         return False
     
     def transition_random(self, p_eval):
-        resolve =  numpy.random.choice(numpy.arange(0, 2), 
-                                       p=[1-p_eval, p_eval])
-        if resolve == True:
+        rnd =  numpy.random.choice(numpy.arange(0, 2),
+                                    p=[1-p_eval, p_eval])
+        if rnd == True:
             print("TRANSITION: RANDOM")
-        return  resolve
+        return  rnd
     
     def transition_restart(self):
         if (self.restart.data == True):
@@ -351,25 +352,27 @@ class SpheroControl():
     ### States
     
     def evaluate_state(self, index):
-        if index == self.B_RANDOM_WALK:
-            self.state_randomwalk()
+        if index == self.B_BALLISTIC:
+            self.state_ballistic()
         elif index == self.B_IDLE:
             self.state_idle()
         elif index == self.B_FOLLOW:
             self.state_follow()
         elif index == self.B_BROADCAST:
             self.state_broadcast()
-        elif index == self.B_SEARCH:
-            self.state_search()
+        elif index == self.B_ROTATE:
+            self.state_rotate()
         return False
     
-    def state_randomwalk(self):
-        print("STATE: RANDOM WALK")
+    def state_ballistic(self):
+        print("STATE: BALLISTIC")
         self.led_front_rgb.r = 0
         self.led_front_rgb.g = 25
         self.led_front_rgb.b = 0
         self.follow = False
         self.broadcast = False
+        self.cmd_vel.linear.x = 0.2
+        self.cmd_vel.angular.z = 0
 
     def state_idle(self):
         print("STATE: IDLE")
@@ -396,13 +399,15 @@ class SpheroControl():
         self.follow = False
         self.broadcast = True
 
-    def state_search(self):
-        print("STATE: SEARCH")
+    def state_rotate(self):
+        print("STATE: ROTATE")
         self.led_front_rgb.r = 25
         self.led_front_rgb.g = 0
-        self.led_front_rgb.b = 25
-        self.broadcast = False
-        self.follow = True
+        self.led_front_rgb.b = 25        
+        rotate = numpy.random.uniform(-self.MAX_BOLT_HEADING, 
+                                      self.MAX_BOLT_HEADING)
+        self.cmd_vel.linear.x = 0 
+        self.cmd_vel.angular.z = rotate 
 
     ### Controls 
     
