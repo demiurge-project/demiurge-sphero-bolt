@@ -39,8 +39,6 @@ class SpheroControl():
     ### Modules parameters
     DARK_THRESHOLD: float = 40
     BRIGHT_THRESHOLD: float = 500
-    NO_SIGNAL: int = 00000
-    P_TRUE = 0.1
 
     ## States
 
@@ -48,6 +46,7 @@ class SpheroControl():
     B_IDLE: int = 1
     B_FOLLOW: int = 2
     B_BROADCAST: int = 3
+    B_SEARCH: int = 4
 
     ## Transitions
 
@@ -55,9 +54,10 @@ class SpheroControl():
     T_DARK: int = 1
     T_BRIGHT: int = 2
     T_SIGNAL: int = 3
-    T_RANDOM: int = 4
-    T_RESTART: int = 5
-    T_STOP: int = 6
+    T_RESTART: int = 4
+    T_STOP: int = 5
+    T_RANDOM_S: int = 6
+    T_RANDOM_L: int = 7
 
     ### Init
 
@@ -91,7 +91,8 @@ class SpheroControl():
             # Outgoing transitions RANDOM_WALK (transition -> state)
             self.B_RANDOM_WALK: {
                 self.T_DARK: self.B_BROADCAST,
-                self.T_RANDOM: self.B_BROADCAST,
+                self.T_SHAKE: self.B_FOLLOW,
+                self.T_RANDOM_L: self.B_SEARCH,
                 self.T_SIGNAL: self.B_FOLLOW,
                 self.T_STOP: self.B_IDLE
             },
@@ -105,7 +106,7 @@ class SpheroControl():
             # Outgoing transitions FOLLOW (transition -> state)
             self.B_FOLLOW: {
                 self.T_SHAKE: self.B_RANDOM_WALK,
-                self.T_RANDOM: self.B_RANDOM_WALK,
+                #self.T_RANDOM: self.B_RANDOM_WALK,
                 self.T_STOP: self.B_IDLE,
                 self.T_RESTART: self.B_RANDOM_WALK
             },
@@ -113,9 +114,16 @@ class SpheroControl():
             # Outgoing transitions BROADCAST (transition -> state)
             self.B_BROADCAST: {
                 self.T_SHAKE: self.B_RANDOM_WALK,
-                self.T_RANDOM: self.B_RANDOM_WALK, 
+                #self.T_RANDOM: self.B_RANDOM_WALK, 
                 self.T_STOP: self.B_IDLE,
                 self.T_RESTART: self.B_RANDOM_WALK
+            }, 
+
+            # Outgoing transitions SEARCH (transition -> state)
+            self.B_SEARCH: {
+                self.T_SHAKE: self.B_RANDOM_WALK,
+                self.T_SIGNAL: self.B_FOLLOW,
+                self.T_RANDOM_L: self.B_RANDOM_WALK,            
             }
         }
 
@@ -282,8 +290,10 @@ class SpheroControl():
             return self.transition_bright()
         elif index == self.T_SIGNAL:
             return self.transition_signal()
-        elif index == self.T_RANDOM:
-            return self.transition_random()
+        elif index == self.T_RANDOM_S:
+            return self.transition_random(0.01)
+        elif index == self.T_RANDOM_L:
+            return self.transition_random(0.2)
         elif index == self.T_RESTART:
             return self.transition_restart()
         elif index == self.T_STOP:
@@ -293,39 +303,48 @@ class SpheroControl():
     def transition_shake(self):
         if (abs(self.imu.linear_acceleration.x) > self.GRAVITY
             or abs(self.imu.linear_acceleration.y) > self.GRAVITY):
+            print("TRANSITION: SHAKE")
+            self.ir_signal.data = False
             return True
         return False
     
     def transition_dark(self):
         if (self.illuminance.illuminance < self.DARK_THRESHOLD):
+            print("TRANSITION: DARK")
             return True
         return False
     
     def transition_bright(self):
         if (self.illuminance.illuminance > self.BRIGHT_THRESHOLD):
+            print("TRANSITION: BRIGHT")
             return True
         return False
     
     def transition_signal(self):
-        if (self.ir_signal.data != self.NO_SIGNAL):
-            self.ir_signal.data = self.NO_SIGNAL
+        if (self.ir_signal.data == True):
+            self.ir_signal.data = False
+            print("TRANSITION: SIGNAL")
             return True
         return False
     
-    def transition_random(self):
+    def transition_random(self, p_eval):
         resolve =  numpy.random.choice(numpy.arange(0, 2), 
-                                       p=[1-self.P_TRUE, self.P_TRUE])
+                                       p=[1-p_eval, p_eval])
+        if resolve == True:
+            print("TRANSITION: RANDOM")
         return  resolve
     
     def transition_restart(self):
-        if (self.restart == True):
-            self.restart = False
+        if (self.restart.data == True):
+            self.restart.data = False
+            print("TRANSITION: RESTART")
             return True
         return False
     
     def transition_stop(self):
-        if (self.stop == True):
-            self.stop = False
+        if (self.stop.data == True):
+            self.stop.data = False
+            print("TRANSITION: STOP")
             return True
         return False
     
@@ -340,32 +359,50 @@ class SpheroControl():
             self.state_follow()
         elif index == self.B_BROADCAST:
             self.state_broadcast()
+        elif index == self.B_SEARCH:
+            self.state_search()
         return False
     
     def state_randomwalk(self):
+        print("STATE: RANDOM WALK")
         self.led_front_rgb.r = 0
         self.led_front_rgb.g = 25
         self.led_front_rgb.b = 0
+        self.follow = False
+        self.broadcast = False
 
     def state_idle(self):
+        print("STATE: IDLE")
         self.led_front_rgb.r = 25
         self.led_front_rgb.g = 0
         self.led_front_rgb.b = 0
+        self.follow = False
+        self.broadcast = False
         self.clear_sphero_velocity()
-
+        
     def state_follow(self):
+        print("STATE: FOLLOW")
         self.led_front_rgb.r = 0
         self.led_front_rgb.g = 25
-        self.led_front_rgb.b = 0
-        self.follow = True
+        self.led_front_rgb.b = 25
         self.broadcast = False
+        self.follow = True
 
     def state_broadcast(self):
+        print("STATE: BROADCAST")
         self.led_front_rgb.r = 25
         self.led_front_rgb.g = 25
         self.led_front_rgb.b = 0
         self.follow = False
         self.broadcast = True
+
+    def state_search(self):
+        print("STATE: SEARCH")
+        self.led_front_rgb.r = 25
+        self.led_front_rgb.g = 0
+        self.led_front_rgb.b = 25
+        self.broadcast = False
+        self.follow = True
 
     ### Controls 
     
