@@ -38,6 +38,8 @@ class SpheroControl():
     ### Modules parameters
     DARK_THRESHOLD: float = 40
     BRIGHT_THRESHOLD: float = 500
+    SHAKE_THRESHOLD: float = 500
+    MIN_ROTATION = 0.5 * MAX_BOLT_HEADING
 
     ## States
 
@@ -57,6 +59,7 @@ class SpheroControl():
     T_STOP: int = 5
     T_RANDOM_S: int = 6
     T_RANDOM_L: int = 7 
+    T_STUCK: int = 8 
 
     ### Init
 
@@ -89,8 +92,8 @@ class SpheroControl():
 
             # Outgoing transitions RANDOM_WALK (transition -> state)
             self.B_BALLISTIC: {
-                #self.T_DARK: self.B_BROADCAST,
-                self.T_SHAKE: self.B_ROTATE,
+                self.T_DARK: self.B_BROADCAST,
+                self.T_STUCK: self.B_ROTATE,
                 #self.T_RANDOM_L: self.B_ROTATE,
                 self.T_SIGNAL: self.B_FOLLOW,
                 self.T_STOP: self.B_IDLE
@@ -105,6 +108,7 @@ class SpheroControl():
             # Outgoing transitions FOLLOW (transition -> state)
             self.B_FOLLOW: {
                 self.T_SHAKE: self.B_BALLISTIC,
+                self.T_STUCK: self.B_ROTATE,
                 #self.T_RANDOM: self.B_RANDOM_WALK,
                 self.T_STOP: self.B_IDLE,
                 self.T_RESTART: self.B_BALLISTIC
@@ -120,7 +124,7 @@ class SpheroControl():
 
             # Outgoing transitions SEARCH (transition -> state)
             self.B_ROTATE: {
-                self.T_SHAKE: self.B_BALLISTIC,
+                #self.T_SHAKE: self.B_BALLISTIC,
                 self.T_SIGNAL: self.B_FOLLOW,
                 self.T_RANDOM_S: self.B_BALLISTIC,
                 self.T_STOP: self.B_IDLE,
@@ -298,12 +302,14 @@ class SpheroControl():
         elif index == self.T_RESTART:
             return self.transition_restart()
         elif index == self.T_STOP:
-            return self.transition_stop()          
+            return self.transition_stop()
+        elif index == self.T_STUCK:
+            return self.transition_stuck()           
         return False
     
     def transition_shake(self):
-        if (abs(self.imu.linear_acceleration.x) > 0.35 * self.GRAVITY
-            or abs(self.imu.linear_acceleration.y) > 0.35 * self.GRAVITY):
+        if (abs(self.imu.linear_acceleration.x) > 0.5 * self.GRAVITY
+            or abs(self.imu.linear_acceleration.y) > 0.5 * self.GRAVITY):
             print("TRANSITION: SHAKE")
             self.ir_signal.data = False
             return True
@@ -346,6 +352,15 @@ class SpheroControl():
         if (self.stop.data == True):
             self.stop.data = False
             print("TRANSITION: STOP")
+            return True
+        return False
+    
+    def transition_stuck(self):
+        if (abs(self.imu.linear_acceleration.x) > 0.35 * self.GRAVITY
+            or abs(self.imu.linear_acceleration.y) > 0.35 * self.GRAVITY 
+            or abs(self.encoders_vel.linear.x) < 1):
+            print("TRANSITION: STUCK")
+            #self.ir_signal.data = False
             return True
         return False
     
@@ -406,6 +421,11 @@ class SpheroControl():
         self.led_front_rgb.b = 25        
         rotate = numpy.random.uniform(-self.MAX_BOLT_HEADING, 
                                       self.MAX_BOLT_HEADING)
+        if numpy.sign(rotate) >= 0:
+            rotate = max(rotate, self.MIN_ROTATION)
+        else:
+            rotate = min(rotate, -self.MIN_ROTATION)
+
         self.cmd_vel.linear.x = 0 
         self.cmd_vel.angular.z = rotate 
 
