@@ -84,8 +84,7 @@ class SpheroControl():
         self.master_m_state  = Bool()
         self.master_r_state  = Bool()
 
-        self.acc_filter_points = [0,0,0,0,0,
-                                  0,0,0,0,0]
+        self.acc_filter_points = [0,0,0,0,0,0,0,0]
         # FSM configuration
 
         # Init state
@@ -105,15 +104,17 @@ class SpheroControl():
             # Outgoing transitions IDLE (transition -> state)
             self.B_IDLE: {
                 self.T_RESTART: self.B_BALLISTIC,
-                self.T_SHAKE: self.B_BALLISTIC,
+                self.T_SHAKE: self.B_IDLE,
                 self.T_M_STATE: self.B_BALLISTIC, 
             }, 
 
             # Outgoing transitions SEARCH (transition -> state)
             self.B_ROTATE: {
+                self.T_SHAKE: self.B_BALLISTIC,
                 self.T_RANDOM_S: self.B_BALLISTIC,
                 self.T_STOP: self.B_IDLE,
                 self.T_RESTART: self.B_BALLISTIC,
+                self.T_M_STATE: self.B_AGGREGATE, 
                      
             },
 
@@ -329,17 +330,20 @@ class SpheroControl():
     
     def transition_shake(self):
         self.acc_filter_points.pop(0)
-        self.acc_filter_points.append(abs(self.imu.linear_acceleration.z - self.GRAVITY))
+        magnitude = abs(math.sqrt(self.imu.linear_acceleration.x**2 + 
+                    self.imu.linear_acceleration.y**2 +
+                    self.imu.linear_acceleration.z**2) - self.GRAVITY)
+        self.acc_filter_points.append(magnitude)
         mean  = statistics.mean(self.acc_filter_points)
-        print("******* MEAN NO SHAKE: ", mean)
-        if (mean > 0.75 * self.GRAVITY):
+        print ("Magnitude: ", magnitude)
+        print ("Mean: ", mean)
+        if (mean > 0.8 * self.GRAVITY):
             print("******* MEAN: ", mean)
             print("TRANSITION: SHAKE")
             self.master_r_state = True
             self.pub_r_state.publish(self.master_r_state)
             self.master_r_state = False
-            self.acc_filter_points = [0,0,0,0,0,
-                                  0,0,0,0,0]
+            self.acc_filter_points = [0,0,0,0,0,0,0,0]
             return True
         return False
     
