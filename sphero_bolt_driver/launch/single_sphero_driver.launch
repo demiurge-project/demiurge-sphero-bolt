@@ -9,7 +9,7 @@
     <group ns="robot_$(arg robot_no)">
         <rosparam command="load" file="$(arg id_file)" />
         <rosparam command="load" file="$(arg params_file)" />
-        <node name="sphero_driver" pkg="sphero_bolt_driver" type="sphero_bolt_driver_node.py" output="screen" required="false" respawn="true" respawn_delay="30">
+        <node name="sphero_driver" pkg="sphero_bolt_driver" type="sphero_bolt_driver_node.py" output="screen" required="false" respawn="true" respawn_delay="20">
         </node>
     </group>
 

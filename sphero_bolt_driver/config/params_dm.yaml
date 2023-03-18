@@ -3,7 +3,7 @@
 #####
 
 # Limits to the speed and heading
-speed_limit:   0.2
+speed_limit:   1.0
 turning_limit: 3.1415
 
 # Give an init LEDs setup
@@ -18,7 +18,7 @@ led_back_rgb:  [6, 1, 15] # [94, 14, 233]
 # to the right. The color of each pixel is expresed in HEX
 
 # Give an init matrix setup
-init_matrix: true
+init_matrix: false
 
 # Complete matrix color, executed before drawing
 led_matrix_rgb: [175, 175, 175]

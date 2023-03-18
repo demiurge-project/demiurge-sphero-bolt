@@ -24,6 +24,7 @@ from spherov2.types import Color
 
 ### Other libraries
 import math
+import random
 
 ### Credits
 __author__     = "David Garzón Ramos"
@@ -61,12 +62,18 @@ class SpheroBolt():
         self.follow         = False
         self.broadcast      = False
         self.ir_signal      = self.NO_SIGNAL
+        self.aggregate      = False
+        self.spread         = False
 
         self.setup_sphero_parameters()
 
     ### Setup BOLT 
 
     def setup_sphero_parameters(self) -> None: 
+
+        #robot number
+        robot_no = rospy.get_param('robot_no', 0)
+        self.robot_no = robot_no
 
         # Velocities parameters
         self.boundary_speed     = float(rospy.get_param('speed_limit', 0.2))
@@ -138,6 +145,14 @@ class SpheroBolt():
         rospy.Subscriber('sphero/broadcast', Bool,
                          self.broadcast_callback, queue_size=1)
         
+        # Aggregation 
+        rospy.Subscriber('sphero/aggregate', Bool,
+                         self.aggregate_callback, queue_size=1)
+        
+        # Dispersion  
+        rospy.Subscriber('sphero/spread', Bool,
+                         self.spread_callback, queue_size=1)
+        
     ### Subscribers
 
     def cmd_vel_callback(self, msg) -> None:
@@ -156,7 +171,9 @@ class SpheroBolt():
     def follow_callback(self, msg) -> None:
         if(msg.data != self.follow):
             if (msg.data == True):
-                droid.start_ir_follow(3,7)
+                droid.reset_aim()
+                self.clear_sphero_velocity()                
+                droid.start_ir_follow(6,7)
                 self.follow = True
             else:
                 droid.reset_aim()
@@ -166,11 +183,100 @@ class SpheroBolt():
     def broadcast_callback(self, msg) -> None:
         if(msg.data != self.broadcast):
             if (msg.data == True):
-                droid.start_ir_broadcast(3,7)
+                droid.reset_aim()
+                droid.start_ir_broadcast(6,7)
                 self.broadcast = True
             else:
+                droid.reset_aim()
                 droid.stop_ir_broadcast()
                 self.broadcast = False
+    
+    def aggregate_callback(self, msg) -> None:
+        val = int(self.robot_no) - 1
+        channels = [val%4+val%4,val%4+val%4+1]
+        if(msg.data != self.aggregate):
+            for i in ['droid.stop_ir_broadcast()',
+            'droid.stop_ir_evade()',
+            'droid.stop_ir_follow()']:
+                try: 
+                    eval(i)
+                except Exception:
+                    pass
+            
+            #print("Aggregate")
+            #print(channels)
+            if (msg.data == True):
+                droid.reset_aim()
+                self.clear_sphero_velocity()         
+                droid.start_ir_broadcast(channels[0],channels[1])
+                """ for i in ([0,1],[2,3],[4,5],[6,7]):
+                    if i != [channels[0],channels[1]]:
+                        droid.start_ir_follow(i[0],i[1])
+                        print("in following:",i) """
+                list = [[0,1],[2,3],[4,5],[6,7]]
+                i = list.index(channels)
+                droid.start_ir_follow(list[(i+1)%4][0],list[(i+1)%4][1])
+                self.aggregate  = True
+            else:
+                self.aggregate = False
+                droid.reset_aim()
+                droid.stop_ir_broadcast()
+                droid.stop_ir_follow()
+        else: 
+            if  self.aggregate == True :
+                list = [[0,1],[2,3],[4,5],[6,7]]
+                i = list.index(channels)
+                randy = random.randint(0,25)
+                if   randy%5 == 0:
+                    droid.start_ir_follow(list[(i+1)%4][0],list[(i+1)%4][1])
+                elif randy%5 == 1: 
+                    droid.start_ir_follow(list[(i+2)%4][0],list[(i+2)%4][1])
+                elif randy%5 == 2: 
+                    droid.start_ir_follow(list[(i+3)%4][0],list[(i+3)%4][1])
+
+                
+    def spread_callback(self, msg) -> None:
+        val = int(self.robot_no) -1 
+        channels = [val%4+val%4,val%4+val%4+1]
+        if(msg.data != self.spread):
+            for i in ['droid.stop_ir_broadcast()',
+            'droid.stop_ir_evade()',
+            'droid.stop_ir_follow()']:
+                try: 
+                    eval(i)
+                except Exception:
+                    pass
+            
+            #print("Spread")
+            #print(channels)
+            if (msg.data == True):
+                droid.reset_aim()
+                self.clear_sphero_velocity()         
+                droid.start_ir_broadcast(channels[0],channels[1])
+                """ for i in ([0,1],[2,3],[4,5],[6,7]):
+                    if i != [channels[0],channels[1]]:
+                        droid.start_ir_evade(i[0],i[1]) """
+                list = [[0,1],[2,3],[4,5],[6,7]]
+                i = list.index(channels)
+                droid.start_ir_evade(list[(i+1)%4][0],list[(i+1)%4][1])
+                self.spread  = True
+            else:
+                self.spread = False
+                droid.reset_aim()
+                droid.stop_ir_broadcast()
+                droid.stop_ir_evade()
+        else: 
+            if  self.spread == True :
+                list = [[0,1],[2,3],[4,5],[6,7]]
+                i = list.index(channels)
+                randy = random.randint(0,10)
+                if randy%3 == 0:
+                    droid.start_ir_evade(list[(i+1)%4][0],list[(i+1)%4][1])
+                elif randy%3 == 1: 
+                    droid.start_ir_evade(list[(i+2)%4][0],list[(i+2)%4][1])
+                elif randy%3 == 2: 
+                    droid.start_ir_evade(list[(i+3)%4][0],list[(i+3)%4][1])
+                
 
     ### Create publishers
 
@@ -194,7 +300,7 @@ class SpheroBolt():
         
         # Encoders vertical acceleration
         self.pub_ir_signal = rospy.Publisher('sphero/ir_signal', 
-                                               Bool, queue_size=1)
+                                               Bool, queue_size=20)
         
     ### Publishers
 
@@ -239,7 +345,7 @@ class SpheroBolt():
 
     def publish_ir_signal(self):
         ir_readings = droid.get_ir_readings()
-        if 3 in ir_readings or 7 in ir_readings:
+        if 6 in ir_readings or 7 in ir_readings:
             ir_signal = Bool()
             ir_signal.data = True
             self.pub_ir_signal.publish(ir_signal)
@@ -249,7 +355,7 @@ class SpheroBolt():
         self.publish_imu()
         self.publish_velocity()
         self.publish_vertical_acc()
-        self.publish_ir_signal()
+        #self.publish_ir_signal()
     
     ### Controls 
 
@@ -315,7 +421,7 @@ class SpheroBolt():
     def control_loop_callback(self, event=None):
         self.set_sphero_leds()
         self.set_sphero_matrix()
-        if (self.follow == False and self.broadcast == False):
+        if (self.follow == False ):
             self.set_sphero_velocity()
 
 
