@@ -60,7 +60,8 @@ class SpheroControl():
     T_STOP: int = 4
     T_RANDOM_S: int = 5
     T_STUCK: int = 6 
-    T_M_STATE: int = 7 
+    T_M_STATE: int = 7
+    T_M_SLEEP: int = 8  
 
     ### Init
 
@@ -83,6 +84,8 @@ class SpheroControl():
         self.spread         = Bool()
         self.master_m_state  = Bool()
         self.master_r_state  = Bool()
+        self.master_m_sleep  = Bool()
+        self.master_r_sleep  = Bool()
 
         self.acc_filter_points = [0,0,0,0,0,0,0,0]
         # FSM configuration
@@ -98,14 +101,18 @@ class SpheroControl():
                 self.T_STUCK: self.B_ROTATE,
                 #self.T_STOP: self.B_IDLE,
                 self.T_SHAKE: self.B_BALLISTIC,
-                self.T_M_STATE: self.B_AGGREGATE,           
+                self.T_M_STATE: self.B_AGGREGATE,
+                self.T_DARK: self.B_BALLISTIC,
+                self.T_M_SLEEP: self.B_IDLE           
             },
 
             # Outgoing transitions IDLE (transition -> state)
             self.B_IDLE: {
                 self.T_RESTART: self.B_BALLISTIC,
                 self.T_SHAKE: self.B_IDLE,
-                self.T_M_STATE: self.B_BALLISTIC, 
+                self.T_M_STATE: self.B_BALLISTIC,
+                self.T_DARK: self.B_IDLE,
+                self.T_M_SLEEP: self.B_IDLE 
             }, 
 
             # Outgoing transitions SEARCH (transition -> state)
@@ -114,22 +121,27 @@ class SpheroControl():
                 self.T_RANDOM_S: self.B_BALLISTIC,
                 self.T_STOP: self.B_IDLE,
                 self.T_RESTART: self.B_BALLISTIC,
-                self.T_M_STATE: self.B_AGGREGATE, 
-                     
+                self.T_M_STATE: self.B_AGGREGATE,
+                self.T_DARK: self.B_IDLE,
+                self.T_M_SLEEP: self.B_IDLE   
             },
 
             self.B_AGGREGATE: {
                 self.T_STOP: self.B_IDLE,
                 self.T_RESTART: self.B_BALLISTIC,
                 self.T_SHAKE: self.B_AGGREGATE,
-                self.T_M_STATE: self.B_SPREAD             
+                self.T_M_STATE: self.B_SPREAD,
+                self.T_DARK: self.B_AGGREGATE,
+                self.T_M_SLEEP: self.B_IDLE             
             },
 
             self.B_SPREAD: {
                 self.T_STOP: self.B_IDLE,
                 self.T_RESTART: self.B_BALLISTIC,
                 self.T_SHAKE: self.B_SPREAD,
-                self.T_M_STATE: self.B_BALLISTIC
+                self.T_M_STATE: self.B_BALLISTIC,
+                self.T_DARK: self.B_SPREAD,
+                self.T_M_SLEEP: self.B_IDLE
             }      
         }
 
@@ -201,6 +213,10 @@ class SpheroControl():
         # Master state change  
         rospy.Subscriber('/master/sphero/state_change', Bool,
                          self.master_state_callback, queue_size=20)
+
+        # Master sleep trigger  
+        rospy.Subscriber('/master/sphero/sleep', Bool,
+                         self.master_sleep_callback, queue_size=1)
         
 
     ### Subscribers
@@ -231,6 +247,9 @@ class SpheroControl():
 
     def master_state_callback(self, msg) -> None:
         self.master_m_state = msg
+
+    def master_sleep_callback(self, msg) -> None:
+        self.master_m_sleep = msg
 
     ### Create publishers
 
@@ -271,6 +290,10 @@ class SpheroControl():
         # New state
         self.pub_r_state = rospy.Publisher('/master/sphero/state_change', 
                                                Bool, queue_size=1)
+
+        # New state
+        self.pub_r_sleep = rospy.Publisher('/master/sphero/sleep', 
+                                               Bool, queue_size=1)
         
         ### Publishers
 
@@ -300,6 +323,8 @@ class SpheroControl():
     def publish_r_state(self):
         self.pub_r_state.publish(self.master_r_state)
 
+    def publish_r_sleep(self):
+        self.pub_r_sleep.publish(self.master_r_sleep)
     
     ### Utils
     
@@ -331,7 +356,9 @@ class SpheroControl():
         elif index == self.T_STUCK:
             return self.transition_stuck()     
         elif index == self.T_M_STATE:
-            return self.transition_master_state() 
+            return self.transition_master_state()
+        elif index == self.T_M_SLEEP:
+            return self.transition_master_sleep()  
         return False
     
     def transition_shake(self):
@@ -346,6 +373,9 @@ class SpheroControl():
     
     def transition_dark(self):
         if (self.illuminance.illuminance < self.DARK_THRESHOLD):
+            self.master_r_sleep = True
+            self.pub_r_sleep.publish(self.master_r_sleep)
+            self.master_r_sleep = False
             print("TRANSITION: DARK")
             return True
         return False
@@ -382,14 +412,20 @@ class SpheroControl():
             abs(self.imu.linear_acceleration.x) > 0.75 * self.GRAVITY or
             abs(self.imu.linear_acceleration.y) > 0.5 * self.GRAVITY):
                 print("TRANSITION: STUCK")
-                #self.ir_signal.data = False
                 return True
         return False
     
     def transition_master_state(self):
         if (self.master_m_state.data == True):
             self.master_m_state.data = False
-            print("TRANSITION: MASTER STATE ")
+            print("TRANSITION: MASTER STATE")
+            return True
+        return False
+
+    def transition_master_sleep(self):
+        if (self.master_m_sleep.data == True):
+            self.master_m_sleep.data = False
+            print("TRANSITION: MASTER SLEEP")
             return True
         return False
     
