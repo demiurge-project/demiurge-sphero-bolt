@@ -40,7 +40,7 @@ class SpheroControl():
     ### Modules parameters
     DARK_THRESHOLD: float = 40
     BRIGHT_THRESHOLD: float = 500
-    SHAKE_THRESHOLD: float = 500
+    SHAKE_THRESHOLD = 0.8 * GRAVITY
     MIN_ROTATION = 0.8* MAX_BOLT_HEADING
 
     ## States
@@ -210,6 +210,12 @@ class SpheroControl():
 
     def imu_callback(self, msg) -> None:
         self.imu = msg
+        self.acc_filter_points.pop(0)
+        magnitude = abs(math.sqrt(self.imu.linear_acceleration.x**2 + 
+                    self.imu.linear_acceleration.y**2 +
+                    self.imu.linear_acceleration.z**2) - self.GRAVITY)
+        # if the robot stops publishing, the values are not cleaned
+        self.acc_filter_points.append(magnitude)
 
     def velocity_callback(self, msg) -> None:
         self.encoders_vel = msg
@@ -329,17 +335,8 @@ class SpheroControl():
         return False
     
     def transition_shake(self):
-        self.acc_filter_points.pop(0)
-        magnitude = abs(math.sqrt(self.imu.linear_acceleration.x**2 + 
-                    self.imu.linear_acceleration.y**2 +
-                    self.imu.linear_acceleration.z**2) - self.GRAVITY)
-        self.acc_filter_points.append(magnitude)
-        mean  = statistics.mean(self.acc_filter_points)
-        print ("Magnitude: ", magnitude)
-        print ("Mean: ", mean)
-        if (mean > 0.8 * self.GRAVITY):
-            print("******* MEAN: ", mean)
-            print("TRANSITION: SHAKE")
+        mean_acc  = statistics.mean(self.acc_filter_points)
+        if (mean_acc > self.SHAKE_THRESHOLD):
             self.master_r_state = True
             self.pub_r_state.publish(self.master_r_state)
             self.master_r_state = False
