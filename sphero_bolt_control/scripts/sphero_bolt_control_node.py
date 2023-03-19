@@ -35,13 +35,24 @@ class SpheroControl():
     MAX_BOLT_SPEED: float = 1.5 # m/s
     MAX_BOLT_HEADING: float = math.pi # rad
     GRAVITY: float = 9.80665 # m/s2
-    
+    C_RED = ColorRGBA(255, 0, 0, 1)
+    C_GREEN = ColorRGBA(0, 255, 0, 1)
+    C_BLUE = ColorRGBA(6, 1, 15, 1)
+    C_CYAN = ColorRGBA(0, 255, 255, 1)
+    C_MAGENTA = ColorRGBA(255, 0, 255, 1)
+    C_YELLOW = ColorRGBA(255, 255, 0, 1)
+    C_BLACK = ColorRGBA(0, 0, 0, 1)
+    C_L_GREEN = ColorRGBA(1, 15, 6, 1)
 
     ### Modules parameters
     DARK_THRESHOLD: float = 40
     BRIGHT_THRESHOLD: float = 500
-    SHAKE_THRESHOLD = 0.8 * GRAVITY
+    SHAKE_THRESHOLD = 3 * GRAVITY
     MIN_ROTATION = 0.8* MAX_BOLT_HEADING
+    BOLT_SPEED = 0.3* MAX_BOLT_SPEED
+    STUCK_ACC_X = 0.75 * GRAVITY
+    STUCK_ACC_y = 0.5 * GRAVITY
+    STATE_T_FILTER = 4
 
     ## States
 
@@ -86,6 +97,7 @@ class SpheroControl():
         self.master_r_state  = Bool()
         self.master_m_sleep  = Bool()
         self.master_r_sleep  = Bool()
+        self.t_last_trns     = rospy.get_time()
 
         self.acc_filter_points = [0,0,0,0,0,0,0,0]
         # FSM configuration
@@ -212,7 +224,7 @@ class SpheroControl():
         
         # Master state change  
         rospy.Subscriber('/master/sphero/state_change', Bool,
-                         self.master_state_callback, queue_size=20)
+                         self.master_state_callback, queue_size=1)
 
         # Master sleep trigger  
         rospy.Subscriber('/master/sphero/sleep', Bool,
@@ -226,12 +238,6 @@ class SpheroControl():
 
     def imu_callback(self, msg) -> None:
         self.imu = msg
-        self.acc_filter_points.pop(0)
-        magnitude = abs(math.sqrt(self.imu.linear_acceleration.x**2 + 
-                    self.imu.linear_acceleration.y**2 +
-                    self.imu.linear_acceleration.z**2) - self.GRAVITY)
-        # if the robot stops publishing, the values are not cleaned
-        self.acc_filter_points.append(magnitude)
 
     def velocity_callback(self, msg) -> None:
         self.encoders_vel = msg
@@ -332,8 +338,8 @@ class SpheroControl():
         self.cmd_vel = Twist()
 
     def clear_sphero_leds(self):
-        self.led_front_rgb = ColorRGBA()
-        self.led_back_rgb = ColorRGBA()
+        self.led_front_rgb = self.C_BLACK
+        self.led_back_rgb = self.C_BLACK
 
     def clear_sphero_matrix(self):
         self.led_matrix_rgb = ColorRGBA()
@@ -362,12 +368,15 @@ class SpheroControl():
         return False
     
     def transition_shake(self):
-        mean_acc  = statistics.mean(self.acc_filter_points)
-        if (mean_acc > self.SHAKE_THRESHOLD):
+        magnitude = abs(math.sqrt(self.imu.linear_acceleration.x**2 + 
+                    self.imu.linear_acceleration.y**2 +
+                    self.imu.linear_acceleration.z**2) - self.GRAVITY)
+        if (magnitude > self.SHAKE_THRESHOLD):
+            self.led_front_rgb = self.C_BLUE
+            print("TRANSITION: SHAKE")
             self.master_r_state = True
             self.pub_r_state.publish(self.master_r_state)
             self.master_r_state = False
-            self.acc_filter_points = [0,0,0,0,0,0,0,0]
             return True
         return False
     
@@ -409,22 +418,28 @@ class SpheroControl():
     
     def transition_stuck(self):
         if (abs(self.encoders_vel.linear.x) < 1 or
-            abs(self.imu.linear_acceleration.x) > 0.75 * self.GRAVITY or
-            abs(self.imu.linear_acceleration.y) > 0.5 * self.GRAVITY):
+            abs(self.imu.linear_acceleration.x) > self.STUCK_ACC_X or
+            abs(self.imu.linear_acceleration.y) > self.STUCK_ACC_y):
                 print("TRANSITION: STUCK")
                 return True
         return False
     
     def transition_master_state(self):
-        if (self.master_m_state.data == True):
+        if (self.master_m_state.data == True and 
+                rospy.get_time() - self.t_last_trns > self.STATE_T_FILTER):
+            self.led_front_rgb = self.C_L_GREEN
             self.master_m_state.data = False
+            self.t_last_trns = rospy.get_time()
             print("TRANSITION: MASTER STATE")
             return True
         return False
 
     def transition_master_sleep(self):
-        if (self.master_m_sleep.data == True):
+        if (self.master_m_sleep.data == True and 
+                rospy.get_time() - self.t_last_trns > self.STATE_T_FILTER):
+            self.led_front_rgb = self.C_L_GREEN
             self.master_m_sleep.data = False
+            self.t_last_trns = rospy.get_time()
             print("TRANSITION: MASTER SLEEP")
             return True
         return False
@@ -446,28 +461,22 @@ class SpheroControl():
     
     def state_ballistic(self):
         print("STATE: BALLISTIC")
-        self.led_front_rgb.r = 0
-        self.led_front_rgb.g = 25
-        self.led_front_rgb.b = 0
+        self.led_matrix_rgb = self.C_GREEN
         self.aggregate = False
         self.spread = False
-        self.cmd_vel.linear.x = 0.3 * self.MAX_BOLT_SPEED
+        self.cmd_vel.linear.x = self.BOLT_SPEED
         self.cmd_vel.angular.z = 0
 
     def state_idle(self):
         print("STATE: IDLE")
-        self.led_front_rgb.r = 25
-        self.led_front_rgb.g = 0
-        self.led_front_rgb.b = 0
+        self.led_matrix_rgb = self.C_RED
         self.aggregate = False
         self.spread = False
         self.clear_sphero_velocity()
         
     def state_aggregate(self):
         print("STATE: AGGREGATE")
-        self.led_front_rgb.r = 148
-        self.led_front_rgb.g = 71
-        self.led_front_rgb.b = 21 
+        self.led_matrix_rgb = self.C_CYAN
         self.follow = False
         self.broadcast = False
         self.aggregate = True
@@ -475,9 +484,7 @@ class SpheroControl():
 
     def state_spread(self):
         print("STATE: SPREAD")
-        self.led_front_rgb.r = 229
-        self.led_front_rgb.g = 97
-        self.led_front_rgb.b = 167
+        self.led_matrix_rgb = self.C_MAGENTA
         self.follow = False
         self.broadcast = False
         self.aggregate = False
@@ -485,9 +492,7 @@ class SpheroControl():
 
     def state_rotate(self):
         print("STATE: ROTATE")
-        self.led_front_rgb.r = 25
-        self.led_front_rgb.g = 0
-        self.led_front_rgb.b = 25        
+        self.led_matrix_rgb = self.C_YELLOW     
         rotate = numpy.random.uniform(-self.MAX_BOLT_HEADING, 
                                       self.MAX_BOLT_HEADING)
         if numpy.sign(rotate) >= 0:

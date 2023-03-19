@@ -11,7 +11,7 @@ init_leds: true
 
 # LEDs color
 led_front_rgb: [1, 15, 6] # [14, 233, 94]
-led_back_rgb:  [6, 1, 15] # [94, 14, 233]
+led_back_rgb:  [1, 15, 6] # [94, 14, 233]
 
 # Starting LEDs matrix, expresed as a cartisian plain
 # with +y pointing to the front of the robot and +x
