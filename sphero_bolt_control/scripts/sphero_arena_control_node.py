@@ -64,6 +64,7 @@ class SpheroArenaControl():
         self.master_m_state  = Bool()
         self.master_m_sleep  = Bool()
         self.t_last_trns     = rospy.get_time()
+        self.trans_color     = False
 
         # FSM configuration
 
@@ -160,6 +161,7 @@ class SpheroArenaControl():
     def transition_restart(self):
         if (self.restart.data == True):
             self.restart.data = False
+            self.trans_color = False
             print("TRANSITION: RESTART")
             return True
         return False
@@ -167,6 +169,7 @@ class SpheroArenaControl():
     def transition_stop(self):
         if (self.stop.data == True):
             self.stop.data = False
+            self.trans_color = False
             print("TRANSITION: STOP")
             return True
         return False
@@ -176,6 +179,7 @@ class SpheroArenaControl():
                 rospy.get_time() - self.t_last_trns > self.STATE_T_FILTER):
             self.master_m_state.data = False
             self.t_last_trns = rospy.get_time()
+            self.trans_color = False
             print("TRANSITION: MASTER STATE")
             return True
         return False
@@ -185,6 +189,7 @@ class SpheroArenaControl():
                 rospy.get_time() - self.t_last_trns > self.STATE_T_FILTER):
             self.master_m_sleep.data = False
             self.t_last_trns = rospy.get_time()
+            self.trans_color = False
             print("TRANSITION: MASTER SLEEP")
             return True
         return False
@@ -206,23 +211,31 @@ class SpheroArenaControl():
     
     def state_ballistic(self):
         print("STATE: BALLISTIC")
-        cmd = "curl -X POST -H \"Content-Type: application/json\" -d \'{\"arena\":{\"edges\":1,\"blocks\":1,\"leds\":216,\"color\":\"omit\",\"brightness\": 95,\"block\":[{\"index\":[1],\"color\":\"green\"}]}}\' http://localhost:8080/arena-handler/api/v1.0/state"'ls -l'
-        os.system(cmd)
+        if self.trans_color == False:
+            cmd = "curl -X POST -H \"Content-Type: application/json\" -d \'{\"arena\":{\"edges\":1,\"blocks\":1,\"leds\":216,\"color\":\"omit\",\"brightness\": 95,\"block\":[{\"index\":[1],\"color\":\"green\"}]}}\' http://localhost:8080/arena-handler/api/v1.0/state"
+            os.system(cmd)
+            self.trans_color = True
 
     def state_idle(self):
         print("STATE: IDLE")
-        cmd = "curl -X POST -H \"Content-Type: application/json\" -d \'{\"arena\":{\"edges\":1,\"blocks\":1,\"leds\":216,\"color\":\"omit\",\"brightness\": 95,\"block\":[{\"index\":[1],\"color\":\"red\"}]}}\' http://localhost:8080/arena-handler/api/v1.0/state"'ls -l'
-        os.system(cmd)
+        if self.trans_color == False:
+            cmd = "curl -X POST -H \"Content-Type: application/json\" -d \'{\"arena\":{\"edges\":1,\"blocks\":1,\"leds\":216,\"color\":\"omit\",\"brightness\": 95,\"block\":[{\"index\":[1],\"color\":\"red\"}]}}\' http://localhost:8080/arena-handler/api/v1.0/state"
+            os.system(cmd)
+            self.trans_color = True
         
     def state_aggregate(self):
         print("STATE: AGGREGATE")
-        cmd = "curl -X POST -H \"Content-Type: application/json\" -d \'{\"arena\":{\"edges\":1,\"blocks\":1,\"leds\":216,\"color\":\"omit\",\"brightness\": 95,\"block\":[{\"index\":[1],\"color\":\"cyan\"}]}}\' http://localhost:8080/arena-handler/api/v1.0/state"'ls -l'
-        os.system(cmd)
+        if self.trans_color == False:
+            cmd = "curl -X POST -H \"Content-Type: application/json\" -d \'{\"arena\":{\"edges\":1,\"blocks\":1,\"leds\":216,\"color\":\"omit\",\"brightness\": 95,\"block\":[{\"index\":[1],\"color\":\"cyan\"}]}}\' http://localhost:8080/arena-handler/api/v1.0/state"
+            os.system(cmd)
+            self.trans_color = True
 
     def state_spread(self):
         print("STATE: SPREAD")
-        cmd = "curl -X POST -H \"Content-Type: application/json\" -d \'{\"arena\":{\"edges\":1,\"blocks\":1,\"leds\":216,\"color\":\"omit\",\"brightness\": 95,\"block\":[{\"index\":[1],\"color\":\"magenta\"}]}}\' http://localhost:8080/arena-handler/api/v1.0/state"'ls -l'
-        os.system(cmd)
+        if self.trans_color == False:
+            cmd = "curl -X POST -H \"Content-Type: application/json\" -d \'{\"arena\":{\"edges\":1,\"blocks\":1,\"leds\":216,\"color\":\"omit\",\"brightness\": 95,\"block\":[{\"index\":[1],\"color\":\"magenta\"}]}}\' http://localhost:8080/arena-handler/api/v1.0/state"
+            os.system(cmd)
+            self.trans_color = True
 
     def state_rotate(self):
         print("STATE: ROTATE")
