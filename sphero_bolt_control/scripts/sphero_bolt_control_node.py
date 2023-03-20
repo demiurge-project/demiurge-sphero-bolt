@@ -45,9 +45,9 @@ class SpheroControl():
     C_L_GREEN = ColorRGBA(1, 15, 6, 1)
 
     ### Modules parameters
-    DARK_THRESHOLD: float = 40
+    DARK_THRESHOLD: float = 20
     BRIGHT_THRESHOLD: float = 500
-    SHAKE_THRESHOLD = 3 * GRAVITY
+    SHAKE_THRESHOLD = 4 * GRAVITY
     MIN_ROTATION = 0.8* MAX_BOLT_HEADING
     BOLT_SPEED = 0.3* MAX_BOLT_SPEED
     STUCK_ACC_X = 0.75 * GRAVITY
@@ -183,6 +183,8 @@ class SpheroControl():
         self.led_matrix_rgb.r = init_led_matrix_rgb[0]
         self.led_matrix_rgb.g = init_led_matrix_rgb[1]
         self.led_matrix_rgb.b = init_led_matrix_rgb[2]
+
+        self.illuminance.illuminance = 300
 
         # TODO Self-calibrate Illuminance 
         # Rotate, register, save the value.         
