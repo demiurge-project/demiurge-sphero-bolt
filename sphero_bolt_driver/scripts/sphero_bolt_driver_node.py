@@ -138,12 +138,12 @@ class SpheroBolt():
                          self.led_matrix_rgb_callback, queue_size=1)
         
         # Complete LED matrix  
-        rospy.Subscriber('sphero/follow', Bool,
-                         self.follow_callback, queue_size=1)
+        #rospy.Subscriber('sphero/follow', Bool,
+        #                 self.follow_callback, queue_size=1)
         
         # Complete LED matrix  
-        rospy.Subscriber('sphero/broadcast', Bool,
-                         self.broadcast_callback, queue_size=1)
+        #rospy.Subscriber('sphero/broadcast', Bool,
+        #                 self.broadcast_callback, queue_size=1)
         
         # Aggregation 
         rospy.Subscriber('sphero/aggregate', Bool,
@@ -183,7 +183,7 @@ class SpheroBolt():
     def broadcast_callback(self, msg) -> None:
         if(msg.data != self.broadcast):
             if (msg.data == True):
-                droid.reset_aim()
+                #droid.reset_aim()
                 droid.start_ir_broadcast(6,7)
                 self.broadcast = True
             else:
@@ -206,7 +206,7 @@ class SpheroBolt():
             #print("Aggregate")
             #print(channels)
             if (msg.data == True):
-                droid.reset_aim()
+                #droid.reset_aim()
                 self.clear_sphero_velocity()         
                 droid.start_ir_broadcast(channels[0],channels[1])
                 """ for i in ([0,1],[2,3],[4,5],[6,7]):
@@ -219,7 +219,7 @@ class SpheroBolt():
                 self.aggregate  = True
             else:
                 self.aggregate = False
-                droid.reset_aim()
+                #droid.reset_aim()
                 droid.stop_ir_broadcast()
                 droid.stop_ir_follow()
         else: 
@@ -250,7 +250,7 @@ class SpheroBolt():
             #print("Spread")
             #print(channels)
             if (msg.data == True):
-                droid.reset_aim()
+                #droid.reset_aim()
                 self.clear_sphero_velocity()         
                 droid.start_ir_broadcast(channels[0],channels[1])
                 """ for i in ([0,1],[2,3],[4,5],[6,7]):
@@ -421,7 +421,7 @@ class SpheroBolt():
     def control_loop_callback(self, event=None):
         self.set_sphero_leds()
         self.set_sphero_matrix()
-        if (self.follow == False ):
+        if (self.aggregate == False and self.spread == False):
             self.set_sphero_velocity()
 
 

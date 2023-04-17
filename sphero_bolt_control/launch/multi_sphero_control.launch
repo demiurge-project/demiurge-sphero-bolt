@@ -2,13 +2,13 @@
 
 <launch>
 
-    <include file="$(find sphero_bolt_control)/launch/single_sphero_control.launch">
+    <!--include file="$(find sphero_bolt_control)/launch/single_sphero_control.launch">
         <arg name="robot_no" value="01"/>
     </include>
 
     <include file="$(find sphero_bolt_control)/launch/single_sphero_control.launch">
         <arg name="robot_no" value="02"/>
-    </include>
+    </include-->
 
     <include file="$(find sphero_bolt_control)/launch/single_sphero_control.launch">
         <arg name="robot_no" value="03"/>
@@ -26,7 +26,7 @@
         <arg name="robot_no" value="06"/>
     </include>
 
-    <include file="$(find sphero_bolt_control)/launch/single_sphero_control.launch">
+    <!--include file="$(find sphero_bolt_control)/launch/single_sphero_control.launch">
         <arg name="robot_no" value="07"/>
     </include>
 
@@ -36,15 +36,15 @@
 
     <include file="$(find sphero_bolt_control)/launch/single_sphero_control.launch">
         <arg name="robot_no" value="09"/>
-    </include>
+    </include-->
 
     <include file="$(find sphero_bolt_control)/launch/single_sphero_control.launch">
         <arg name="robot_no" value="10"/>
     </include>
 
-    <include file="$(find sphero_bolt_control)/launch/single_sphero_control.launch">
+    <!--include file="$(find sphero_bolt_control)/launch/single_sphero_control.launch">
         <arg name="robot_no" value="11"/>
-    </include>
+    </include-->
 
     <include file="$(find sphero_bolt_control)/launch/single_sphero_control.launch">
         <arg name="robot_no" value="12"/>

@@ -47,12 +47,16 @@ class SpheroControl():
     ### Modules parameters
     DARK_THRESHOLD: float = 20
     BRIGHT_THRESHOLD: float = 500
-    SHAKE_THRESHOLD = 4 * GRAVITY
+    SHAKE_THRESHOLD = 1.5 * GRAVITY
     MIN_ROTATION = 0.8* MAX_BOLT_HEADING
     BOLT_SPEED = 0.3* MAX_BOLT_SPEED
     STUCK_ACC_X = 0.75 * GRAVITY
     STUCK_ACC_y = 0.5 * GRAVITY
     STATE_T_FILTER = 4
+    STATE_S_FILTER = 10
+    DARK_T_THRESHOLD = 0.25
+    SHAKE_T_THRESHOLD = 1
+    N_SHAKES_THRESHOLD = 4
 
     ## States
 
@@ -98,6 +102,10 @@ class SpheroControl():
         self.master_m_sleep  = Bool()
         self.master_r_sleep  = Bool()
         self.t_last_trns     = rospy.get_time()
+        self.t_last_shake    = rospy.get_time()
+        self.t_last_dark     = 0
+        self.in_dark         = False
+        self.n_shakes        = 0
 
         self.acc_filter_points = [0,0,0,0,0,0,0,0]
         # FSM configuration
@@ -134,7 +142,7 @@ class SpheroControl():
                 self.T_STOP: self.B_IDLE,
                 self.T_RESTART: self.B_BALLISTIC,
                 self.T_M_STATE: self.B_AGGREGATE,
-                self.T_DARK: self.B_IDLE,
+                self.T_DARK: self.B_ROTATE,
                 self.T_M_SLEEP: self.B_IDLE   
             },
 
@@ -374,21 +382,47 @@ class SpheroControl():
                     self.imu.linear_acceleration.y**2 +
                     self.imu.linear_acceleration.z**2) - self.GRAVITY)
         if (magnitude > self.SHAKE_THRESHOLD):
-            self.led_front_rgb = self.C_BLUE
-            print("TRANSITION: SHAKE")
-            self.master_r_state = True
-            self.pub_r_state.publish(self.master_r_state)
-            self.master_r_state = False
-            return True
+            #self.t_last_shake = rospy.get_time()
+            #and rospy.get_time() - self.t_last_shake < self.SHAKE_T_THRESHOLD):
+            print("Number of shakes: ", self.n_shakes)
+            if (rospy.get_time()-self.t_last_shake < self.SHAKE_T_THRESHOLD):
+                self.n_shakes = self.n_shakes + 1
+            else:
+                self.n_shakes = 1
+
+            if(self.n_shakes > self.N_SHAKES_THRESHOLD):
+                #self.led_front_rgb = self.C_BLUE
+                #self.t_last_shake = rospy.get_time()
+                print("TRANSITION: SHAKE")
+                self.master_r_state = True
+                self.pub_r_state.publish(self.master_r_state)
+                self.master_r_state = False
+                self.n_shakes = 0
+                self.t_last_shake = rospy.get_time()
+                return True
+            self.t_last_shake = rospy.get_time()
         return False
     
     def transition_dark(self):
-        if (self.illuminance.illuminance < self.DARK_THRESHOLD):
-            self.master_r_sleep = True
-            self.pub_r_sleep.publish(self.master_r_sleep)
-            self.master_r_sleep = False
-            print("TRANSITION: DARK")
-            return True
+        if (0 < self.illuminance.illuminance < self.DARK_THRESHOLD):
+            print("IN THRESHOLD*****************")
+            if (self.in_dark != True):
+                print("START COUNT *****************")
+                self.t_last_dark = rospy.get_time()
+                self.in_dark = True
+                return False
+            print("***** Elapsed time: ", rospy.get_time() - self.t_last_dark)
+            if (rospy.get_time() - self.t_last_dark > self.DARK_T_THRESHOLD):
+                self.master_r_sleep = True                        
+                self.pub_r_sleep.publish(self.master_r_sleep)
+                self.master_r_sleep = False
+                print("TRANSITION: DARK")
+                self.t_last_dark = rospy.get_time()
+                return True
+        else:
+            self.in_dark = False
+            self.t_last_dark = rospy.get_time()
+            return False
         return False
     
     def transition_bright(self):
@@ -429,7 +463,7 @@ class SpheroControl():
     def transition_master_state(self):
         if (self.master_m_state.data == True and 
                 rospy.get_time() - self.t_last_trns > self.STATE_T_FILTER):
-            self.led_front_rgb = self.C_L_GREEN
+            #self.led_front_rgb = self.C_L_GREEN
             self.master_m_state.data = False
             self.t_last_trns = rospy.get_time()
             print("TRANSITION: MASTER STATE")
@@ -439,7 +473,7 @@ class SpheroControl():
     def transition_master_sleep(self):
         if (self.master_m_sleep.data == True and 
                 rospy.get_time() - self.t_last_trns > self.STATE_T_FILTER):
-            self.led_front_rgb = self.C_L_GREEN
+            #self.led_front_rgb = self.C_L_GREEN
             self.master_m_sleep.data = False
             self.t_last_trns = rospy.get_time()
             print("TRANSITION: MASTER SLEEP")
@@ -462,7 +496,7 @@ class SpheroControl():
         return False
     
     def state_ballistic(self):
-        print("STATE: BALLISTIC")
+        #print("STATE: BALLISTIC")
         self.led_matrix_rgb = self.C_GREEN
         self.aggregate = False
         self.spread = False
@@ -470,14 +504,14 @@ class SpheroControl():
         self.cmd_vel.angular.z = 0
 
     def state_idle(self):
-        print("STATE: IDLE")
+        #print("STATE: IDLE")
         self.led_matrix_rgb = self.C_RED
         self.aggregate = False
         self.spread = False
         self.clear_sphero_velocity()
         
     def state_aggregate(self):
-        print("STATE: AGGREGATE")
+        #print("STATE: AGGREGATE")
         self.led_matrix_rgb = self.C_CYAN
         self.follow = False
         self.broadcast = False
@@ -485,7 +519,7 @@ class SpheroControl():
         self.spread = False 
 
     def state_spread(self):
-        print("STATE: SPREAD")
+        #print("STATE: SPREAD")
         self.led_matrix_rgb = self.C_MAGENTA
         self.follow = False
         self.broadcast = False
@@ -493,7 +527,7 @@ class SpheroControl():
         self.spread = True
 
     def state_rotate(self):
-        print("STATE: ROTATE")
+        #print("STATE: ROTATE")
         self.led_matrix_rgb = self.C_YELLOW     
         rotate = numpy.random.uniform(-self.MAX_BOLT_HEADING, 
                                       self.MAX_BOLT_HEADING)
